@@ -1,0 +1,153 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id        Int      @id @default(autoincrement())
+  name      String
+  industry  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  profiles      BusinessProfile[]
+  entities      Entity[]
+  dataSources   DataSource[]
+  uploads       Upload[]
+  metrics       Metric[]
+  opportunities Opportunity[]
+}
+
+model BusinessProfile {
+  id        Int          @id @default(autoincrement())
+  orgId     Int
+  org       Organization @relation(fields: [orgId], references: [id])
+  type      String       // IDENTITY | METRICS | SOURCES | CONTEXT
+  content   String       // Markdown text
+  updatedAt DateTime     @updatedAt
+  createdAt DateTime     @default(now())
+
+  @@unique([orgId, type])
+}
+
+model Entity {
+  id            Int          @id @default(autoincrement())
+  orgId         Int
+  org           Organization @relation(fields: [orgId], references: [id])
+  canonicalName String
+  entityType    String       // location | department | sku | route | practice | etc
+  metadata      Json?
+  createdAt     DateTime     @default(now())
+
+  aliases       EntityAlias[]
+  metricValues  MetricValue[]
+  opportunities Opportunity[]
+  score         OpportunityScore?
+
+  @@unique([orgId, canonicalName])
+}
+
+model EntityAlias {
+  id       Int    @id @default(autoincrement())
+  entityId Int
+  entity   Entity @relation(fields: [entityId], references: [id])
+  alias    String
+  source   String?
+
+  @@unique([alias, entityId])
+}
+
+model DataSource {
+  id          Int          @id @default(autoincrement())
+  orgId       Int
+  org         Organization @relation(fields: [orgId], references: [id])
+  name        String
+  description String?
+  system      String?      // freeform: "Dentrix", "QuickBooks", etc
+  createdAt   DateTime     @default(now())
+
+  uploads Upload[]
+}
+
+model Upload {
+  id             Int         @id @default(autoincrement())
+  orgId          Int
+  org            Organization @relation(fields: [orgId], references: [id])
+  dataSourceId   Int?
+  dataSource     DataSource? @relation(fields: [dataSourceId], references: [id])
+  filename       String
+  sourceDate     DateTime?
+  uploadedAt     DateTime    @default(now())
+  rowCount       Int?
+  fieldCount     Int?
+  mappingSummary String?     // AI output JSON
+
+  metricValues MetricValue[]
+}
+
+model Metric {
+  id          Int          @id @default(autoincrement())
+  orgId       Int
+  org         Organization @relation(fields: [orgId], references: [id])
+  name        String
+  slug        String
+  category    String?      // revenue | cost | efficiency | capacity | retention
+  unit        String?      // dollar | percent | count | days
+  description String?
+  aiGenerated Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+
+  values        MetricValue[]
+  opportunities Opportunity[] @relation("OpportunityMetrics")
+
+  @@unique([orgId, slug])
+}
+
+model MetricValue {
+  id        Int      @id @default(autoincrement())
+  entityId  Int
+  entity    Entity   @relation(fields: [entityId], references: [id])
+  metricId  Int
+  metric    Metric   @relation(fields: [metricId], references: [id])
+  uploadId  Int
+  upload    Upload   @relation(fields: [uploadId], references: [id])
+  value     Float
+  valueDate DateTime?
+  isLatest  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@unique([entityId, metricId, uploadId])
+  @@index([entityId, metricId, isLatest])
+}
+
+model Opportunity {
+  id             Int          @id @default(autoincrement())
+  orgId          Int
+  org            Organization @relation(fields: [orgId], references: [id])
+  entityId       Int?
+  entity         Entity?      @relation(fields: [entityId], references: [id])
+  type           String       // Revenue | Efficiency | Capacity | Cost | Retention | Supply Chain
+  title          String
+  valueSized     Float?       // dollar value of opportunity
+  recommendation String       // one action
+  alternatives   String?      // JSON array of 1-2 alternatives
+  priority       Int          @default(0) // higher = more important
+  updatedAt      DateTime     @updatedAt
+  createdAt      DateTime     @default(now())
+
+  metrics Metric[] @relation("OpportunityMetrics")
+}
+
+model OpportunityScore {
+  id                     Int      @id @default(autoincrement())
+  entityId               Int      @unique
+  entity                 Entity   @relation(fields: [entityId], references: [id])
+  score                  Float    // 0-100 (higher = more opportunity)
+  primaryOpportunityType String?
+  primaryValueSized      Float?
+  computedAt             DateTime @default(now())
+}
