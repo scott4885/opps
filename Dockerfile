@@ -1,11 +1,11 @@
 FROM node:20-alpine AS base
-RUN apk add --no-cache openssl
-ENV NEXT_TELEMETRY_DISABLED=1
+RUN apk add --no-cache openssl openssl-dev libc6-compat
 
 FROM base AS deps
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --only=production
+COPY prisma ./prisma
+RUN npm ci
 
 FROM base AS builder
 WORKDIR /app
@@ -18,9 +18,7 @@ RUN npm run build
 
 FROM base AS runner
 WORKDIR /app
-ENV NODE_ENV=production \
-    NEXT_TELEMETRY_DISABLED=1 \
-    HOSTNAME=0.0.0.0
+ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 HOSTNAME=0.0.0.0
 
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
