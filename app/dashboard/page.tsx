@@ -6,6 +6,8 @@ import { redirect } from 'next/navigation';
 import { RefreshButton } from './RefreshButton';
 import { EntityTable } from './EntityTable';
 import { OpportunitiesSection } from './OpportunitiesSection';
+import { OpportunityValueChart } from './OpportunityValueChart';
+import { EntityScoreChart } from './EntityScoreChart';
 
 export const dynamic = 'force-dynamic';
 
@@ -95,6 +97,19 @@ export default async function DashboardPage({
     .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime())[0]?.uploadedAt;
 
   const sourcesConnected = org.dataSources.length;
+
+  // Chart data
+  const oppsByCategory = Object.entries(
+    opportunities.reduce((acc, o) => {
+      acc[o.type] = (acc[o.type] || 0) + (o.valueSized || 0);
+      return acc;
+    }, {} as Record<string, number>)
+  ).map(([type, value]) => ({ type, value })).sort((a, b) => b.value - a.value);
+
+  const entityScoreData = entityScores.slice(0, 12).map(e => ({
+    name: e.canonicalName,
+    score: Math.round(e.score!.score)
+  }));
 
   const lastUpdatedLabel = lastUploadDate
     ? new Date(lastUploadDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -188,6 +203,14 @@ export default async function DashboardPage({
               <div className="text-lg sm:text-xl font-bold text-gray-900 leading-tight">{lastUpdatedLabel}</div>
               <div className="text-xs sm:text-sm text-gray-500 mt-0.5">Last Updated</div>
             </div>
+          </div>
+        )}
+
+        {/* Charts — Opportunity Value by Category + Entity Score Chart */}
+        {oppsByCategory.length > 0 && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+            <OpportunityValueChart data={oppsByCategory} />
+            <EntityScoreChart data={entityScoreData} />
           </div>
         )}
 
