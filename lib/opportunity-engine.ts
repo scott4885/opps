@@ -11,7 +11,7 @@ async function callOpportunityAI(
     id: number;
     name: string;
     type: string;
-    metrics: Array<{ name: string; slug: string; category: string; unit: string; value: number }>;
+    metrics: Array<{ name: string; slug: string; category: string | null; unit: string | null; value: number }>;
   }>
 ) {
   const prompt = `You are an expert business analyst for Opps. — a business intelligence platform.
