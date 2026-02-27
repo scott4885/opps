@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "seed": "ts-node --project tsconfig.seed.json prisma/seed.ts",
+    "test:smoke": "TEST_URL=http://localhost:3003 ts-node --project tsconfig.seed.json tests/smoke.ts"
   },
   "prisma": {
     "seed": "ts-node --transpile-only prisma/seed.ts"

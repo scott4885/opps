@@ -94,7 +94,7 @@ export async function POST(req: NextRequest) {
           // Try direct match
           entity = await prisma.entity.findUnique({
             where: { orgId_canonicalName: { orgId, canonicalName: name } },
-          });
+          }) ?? undefined;
           if (!entity) {
             entity = await prisma.entity.create({
               data: { orgId, canonicalName: name, entityType: mapping.entityType },
