@@ -48,7 +48,6 @@ model Entity {
   aliases       EntityAlias[]
   metricValues  MetricValue[]
   opportunities Opportunity[]
-  users         User[]
   score         OpportunityScore?
 
   @@unique([orgId, canonicalName])
@@ -106,7 +105,6 @@ model Metric {
 
   values        MetricValue[]
   opportunities Opportunity[]
-  users         User[] @relation("OpportunityMetrics")
 
   @@unique([orgId, slug])
 }
