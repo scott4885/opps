@@ -1,4 +1,5 @@
 const { PrismaClient } = require('@prisma/client');
+const bcrypt = require('bcryptjs');
 const prisma = new PrismaClient();
 
 async function main() {
@@ -108,6 +109,38 @@ async function main() {
     });
     console.log(`  ✓ ${profile.type} profile`);
   }
+
+  // Create Demo Client org (ID 2)
+  const demoOrg = await prisma.organization.upsert({
+    where: { id: 2 },
+    update: { name: 'Demo Client', industry: 'Demo' },
+    create: { id: 2, name: 'Demo Client', industry: 'Demo' },
+  });
+  console.log('  ✓ Demo Client org created (ID:', demoOrg.id, ')');
+
+  // Create users
+  const hash = (pw) => bcrypt.hashSync(pw, 10);
+
+  await prisma.user.upsert({
+    where: { email: 'admin@opps.ai' },
+    update: {},
+    create: { email: 'admin@opps.ai', password: hash('Opps2026!'), role: 'admin', orgId: null },
+  });
+  console.log('  ✓ admin@opps.ai user');
+
+  await prisma.user.upsert({
+    where: { email: 'gen4@opps.ai' },
+    update: {},
+    create: { email: 'gen4@opps.ai', password: hash('Gen4Opps2026!'), role: 'member', orgId: 1 },
+  });
+  console.log('  ✓ gen4@opps.ai user');
+
+  await prisma.user.upsert({
+    where: { email: 'demo@opps.ai' },
+    update: {},
+    create: { email: 'demo@opps.ai', password: hash('Demo2026!'), role: 'member', orgId: 2 },
+  });
+  console.log('  ✓ demo@opps.ai user');
 
   console.log('Seed complete! Org ID:', org.id);
 }

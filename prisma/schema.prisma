@@ -21,6 +21,7 @@ model Organization {
   uploads       Upload[]
   metrics       Metric[]
   opportunities Opportunity[]
+  users         User[]
 }
 
 model BusinessProfile {
@@ -47,6 +48,7 @@ model Entity {
   aliases       EntityAlias[]
   metricValues  MetricValue[]
   opportunities Opportunity[]
+  users         User[]
   score         OpportunityScore?
 
   @@unique([orgId, canonicalName])
@@ -103,7 +105,8 @@ model Metric {
   createdAt   DateTime     @default(now())
 
   values        MetricValue[]
-  opportunities Opportunity[] @relation("OpportunityMetrics")
+  opportunities Opportunity[]
+  users         User[] @relation("OpportunityMetrics")
 
   @@unique([orgId, slug])
 }
@@ -151,4 +154,14 @@ model OpportunityScore {
   primaryOpportunityType String?
   primaryValueSized      Float?
   computedAt             DateTime @default(now())
+}
+
+model User {
+  id        Int           @id @default(autoincrement())
+  email     String        @unique
+  password  String
+  role      String        @default("member")
+  orgId     Int?
+  org       Organization? @relation(fields: [orgId], references: [id])
+  createdAt DateTime      @default(now())
 }

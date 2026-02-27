@@ -1,4 +1,6 @@
+import { getSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { SignOutButton } from './SignOutButton';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { RefreshButton } from './RefreshButton';
@@ -52,6 +54,12 @@ export default async function DashboardPage({
   });
 
   if (!org) redirect('/setup');
+
+  // Auth enforcement: members can only see their own org
+  const session = await getSession();
+  if (session && session.role === 'member' && session.orgId && session.orgId !== orgId) {
+    redirect(`/dashboard?orgId=${session.orgId}`);
+  }
 
   const opportunities = await prisma.opportunity.findMany({
     where: { orgId },
@@ -124,6 +132,7 @@ export default async function DashboardPage({
               <span className="hidden sm:inline">Upload File</span>
               <span className="sm:hidden">Upload</span>
             </Link>
+            <SignOutButton />
           </div>
         </div>
       </header>
