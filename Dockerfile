@@ -1,11 +1,11 @@
-FROM node:20-slim AS base
-RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+FROM node:20-alpine AS base
+RUN apk add --no-cache openssl
+ENV NEXT_TELEMETRY_DISABLED=1
 
 FROM base AS deps
 WORKDIR /app
 COPY package*.json ./
-COPY prisma ./prisma
-RUN npm ci
+RUN npm ci --only=production
 
 FROM base AS builder
 WORKDIR /app
@@ -18,10 +18,12 @@ RUN npm run build
 
 FROM base AS runner
 WORKDIR /app
-ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 HOSTNAME=0.0.0.0
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    HOSTNAME=0.0.0.0
 
-RUN groupadd --system --gid 1001 nodejs && \
-    useradd --system --uid 1001 nextjs
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
 
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
