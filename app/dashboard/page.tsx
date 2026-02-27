@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { RefreshButton } from './RefreshButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -118,6 +119,7 @@ export default async function DashboardPage({
                 Refreshed {new Date(lastUploadDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
               </span>
             )}
+            <RefreshButton orgId={orgId} />
             <Link
               href={`/upload?orgId=${orgId}`}
               className="inline-flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 bg-indigo-600 text-white text-xs sm:text-sm font-semibold rounded-lg hover:bg-indigo-700 transition-colors"
