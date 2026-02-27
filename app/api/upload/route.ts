@@ -7,6 +7,123 @@ import { runOpportunityEngine } from '@/lib/opportunity-engine';
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
 
+// ---------- MasterLookup / Crosswalk detection ----------
+
+/**
+ * Returns true if the sheet looks like a MasterLookup / crosswalk file.
+ * Heuristics:
+ *  - Filename contains "master", "lookup", "crosswalk", or "alias"
+ *  - OR headers contain >= 4 alias-style columns (Alias, AKA, DBA, Alt Name, Nickname…)
+ *  - OR first non-entity column is named "Canonical" or "Official Name"
+ */
+function isMasterLookupSheet(
+  filename: string,
+  sheetName: string,
+  headers: string[]
+): boolean {
+  const nameHint = /master|lookup|crosswalk|alias/i.test(filename) ||
+    /master|lookup|crosswalk|alias/i.test(sheetName);
+  if (nameHint) return true;
+
+  const aliasKeywords = /alias|aka|dba|alt.?name|nickname|other.?name|also.?known/i;
+  const aliasCount = headers.filter((h) => aliasKeywords.test(h)).length;
+  if (aliasCount >= 3) return true;
+
+  // If the first two headers imply canonical vs alias pattern
+  const first = (headers[0] ?? '').toLowerCase();
+  const second = (headers[1] ?? '').toLowerCase();
+  if (
+    (first.includes('canonical') || first.includes('official') || first.includes('legal')) &&
+    (second.includes('alias') || second.includes('aka') || second.includes('name'))
+  ) return true;
+
+  return false;
+}
+
+/**
+ * Process a MasterLookup sheet:
+ * - Column 0: canonical name
+ * - Remaining columns: aliases (skip blanks)
+ * - Column E (index 4) if present and header looks like "ops director" / "director": extract to entity metadata
+ */
+async function processCrosswalk(
+  orgId: number,
+  rows: Record<string, unknown>[],
+  headers: string[],
+  source: string
+): Promise<{ entitiesCreated: number; aliasesMapped: number }> {
+  let entitiesCreated = 0;
+  let aliasesMapped = 0;
+
+  // Identify the canonical name column (first header)
+  const canonicalCol = headers[0];
+
+  // Identify alias columns (all except canonical, and except ops-director-like col)
+  const directorColIdx = headers.findIndex((h) =>
+    /ops.?director|director|manager/i.test(h)
+  );
+  const directorCol = directorColIdx >= 0 ? headers[directorColIdx] : null;
+
+  const aliasColumns = headers.filter((h, i) => i !== 0 && i !== directorColIdx);
+
+  for (const row of rows) {
+    const canonical = row[canonicalCol];
+    if (!canonical || typeof canonical !== 'string' || !canonical.trim()) continue;
+    const canonicalName = canonical.trim();
+
+    const opsDirector = directorCol ? String(row[directorCol] ?? '').trim() || null : null;
+
+    // Find or create entity
+    let entity = await prisma.entity.findUnique({
+      where: { orgId_canonicalName: { orgId, canonicalName } },
+    });
+    if (!entity) {
+      entity = await prisma.entity.create({
+        data: {
+          orgId,
+          canonicalName,
+          entityType: 'location',
+          metadata: opsDirector ? { opsDirector } : undefined,
+        },
+      });
+      entitiesCreated++;
+    } else if (opsDirector && entity.metadata) {
+      // Update metadata with ops director if missing
+      const meta = entity.metadata as Record<string, unknown>;
+      if (!meta.opsDirector) {
+        await prisma.entity.update({
+          where: { id: entity.id },
+          data: { metadata: { ...meta, opsDirector } },
+        });
+      }
+    }
+
+    // Register the canonical name itself as an alias
+    await prisma.entityAlias.upsert({
+      where: { alias_entityId: { alias: canonicalName.toLowerCase(), entityId: entity.id } },
+      update: {},
+      create: { entityId: entity.id, alias: canonicalName.toLowerCase(), source },
+    });
+
+    // Register all alias columns
+    for (const col of aliasColumns) {
+      const aliasRaw = row[col];
+      if (!aliasRaw || typeof aliasRaw !== 'string' || !aliasRaw.trim()) continue;
+      const alias = aliasRaw.trim();
+      await prisma.entityAlias.upsert({
+        where: { alias_entityId: { alias: alias.toLowerCase(), entityId: entity.id } },
+        update: {},
+        create: { entityId: entity.id, alias: alias.toLowerCase(), source },
+      });
+      aliasesMapped++;
+    }
+  }
+
+  return { entitiesCreated, aliasesMapped };
+}
+
+// ---------- Main upload handler ----------
+
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
@@ -28,6 +145,37 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
     const sheets = parseFile(buffer, file.name);
 
+    // --- Check if this is a MasterLookup / Crosswalk file ---
+    // Use the first non-empty sheet for detection
+    const firstSheet = sheets.find((s) => s.rows.length > 0);
+    if (firstSheet && isMasterLookupSheet(file.name, firstSheet.sheetName, firstSheet.headers)) {
+      // Process all sheets as crosswalk
+      let totalEntitiesCreated = 0;
+      let totalAliasesMapped = 0;
+
+      for (const sheet of sheets) {
+        if (sheet.rows.length === 0) continue;
+        const { entitiesCreated, aliasesMapped } = await processCrosswalk(
+          orgId,
+          sheet.rows as Record<string, unknown>[],
+          sheet.headers,
+          file.name
+        );
+        totalEntitiesCreated += entitiesCreated;
+        totalAliasesMapped += aliasesMapped;
+      }
+
+      return NextResponse.json({
+        ok: true,
+        isCrosswalk: true,
+        entitiesCreated: totalEntitiesCreated,
+        aliasesMapped: totalAliasesMapped,
+        sheetsProcessed: sheets.length,
+        message: `Crosswalk processed: ${totalEntitiesCreated} entities created, ${totalAliasesMapped} aliases mapped.`,
+      });
+    }
+
+    // --- Regular data upload ---
     let totalEntitiesProcessed = 0;
     let totalMetricsCreated = 0;
     let uploadId = 0;
@@ -171,6 +319,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       ok: true,
+      isCrosswalk: false,
       uploadId,
       entitiesProcessed: totalEntitiesProcessed,
       metricsCreated: totalMetricsCreated,
