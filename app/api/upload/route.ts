@@ -3,6 +3,9 @@ import { prisma } from '@/lib/prisma';
 import { parseFile } from '@/lib/excel-parser';
 import { mapFileToMetrics } from '@/lib/ai-mapper';
 import { runOpportunityEngine } from '@/lib/opportunity-engine';
+import { getIronSession } from 'iron-session';
+import { sessionOptions, SessionData } from '@/lib/session';
+import { cookies } from 'next/headers';
 
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
@@ -131,8 +134,20 @@ export async function POST(req: NextRequest) {
     const orgIdStr = formData.get('orgId') as string | null;
 
     if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 });
-    if (!orgIdStr) return NextResponse.json({ error: 'orgId required' }, { status: 400 });
-    const orgId = parseInt(orgIdStr);
+
+    // Auth: read orgId from session
+    const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
+    if (!session.userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    let orgId: number;
+    if (session.role === 'admin' && orgIdStr) {
+      orgId = parseInt(orgIdStr);
+    } else if (session.orgId) {
+      orgId = session.orgId;
+    } else {
+      return NextResponse.json({ error: 'No org associated with your account' }, { status: 400 });
+    }
 
     // Get org and business profile for context
     const org = await prisma.organization.findUnique({ where: { id: orgId } });

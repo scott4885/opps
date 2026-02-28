@@ -1,89 +1,80 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 
-interface UploadResult {
-  ok: boolean;
-  uploadId?: number;
-  uploadIds?: number[];
-  entitiesProcessed?: number;
-  metricsCreated?: number;
-  sheetsProcessed?: number;
-  // crosswalk results
+interface FileResult {
+  filename: string;
+  entities: number;
+  metrics: number;
+  sheets: number;
   isCrosswalk?: boolean;
   entitiesCreated?: number;
   aliasesMapped?: number;
-  error?: string;
 }
 
-interface Props {
-  orgId: number;
-  orgName: string;
-}
-
-export default function UploadClient({ orgId, orgName }: Props) {
+export default function UploadClient({ orgId: initialOrgId, orgName }: { orgId: number; orgName: string }) {
   const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [result, setResult] = useState<UploadResult | null>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadResults, setUploadResults] = useState<FileResult[]>([]);
+  const [currentFile, setCurrentFile] = useState('');
   const [error, setError] = useState('');
-  const [processingStep, setProcessingStep] = useState(0);
+  const [step, setStep] = useState<1 | 2 | 3>(1); // 1=ready, 2=uploading, 3=done
+  const [orgId, setOrgId] = useState(initialOrgId);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleUpload = useCallback(async (file: File) => {
-    setSelectedFile(file);
+  // Fetch orgId from session on mount
+  useEffect(() => {
+    fetch('/api/auth/me').then(r => r.json()).then(data => {
+      if (data.orgId) setOrgId(data.orgId);
+    }).catch(() => {});
+  }, []);
+
+  const handleFileUpload = useCallback(async (files: File[]) => {
     setUploading(true);
-    setResult(null);
     setError('');
-    setProcessingStep(1);
+    setStep(2);
+    const results: FileResult[] = [];
 
-    const fd = new FormData();
-    fd.append('file', file);
-    fd.append('orgId', String(orgId));
+    for (const file of files) {
+      setCurrentFile(file.name);
+      const fd = new FormData();
+      fd.append('file', file);
+      // orgId now read from session server-side, but pass for admin override
+      if (orgId) fd.append('orgId', String(orgId));
 
-    // Simulate step progression for UX
-    const stepTimer = setInterval(() => {
-      setProcessingStep((prev) => Math.min(prev + 1, 3));
-    }, 4000);
-
-    try {
-      const res = await fetch('/api/upload', { method: 'POST', body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Upload failed');
-      setResult(data);
-    } catch (err) {
-      setError(String(err));
-    } finally {
-      clearInterval(stepTimer);
-      setUploading(false);
-      setProcessingStep(0);
+      try {
+        const res = await fetch('/api/upload', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Upload failed');
+        results.push({
+          filename: file.name,
+          entities: data.entitiesProcessed ?? data.entitiesCreated ?? 0,
+          metrics: data.metricsCreated ?? 0,
+          sheets: data.sheetsProcessed ?? 0,
+          isCrosswalk: data.isCrosswalk,
+          entitiesCreated: data.entitiesCreated,
+          aliasesMapped: data.aliasesMapped,
+        });
+      } catch (err) {
+        setError(prev => prev ? prev + '\n' + `${file.name}: ${String(err)}` : `${file.name}: ${String(err)}`);
+      }
+      // Update results progressively so UI shows progress
+      setUploadResults([...results]);
     }
+
+    setUploadResults(results);
+    setUploading(false);
+    setCurrentFile('');
+    if (results.length) setStep(3);
   }, [orgId]);
 
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      setDragOver(false);
-      const file = e.dataTransfer.files[0];
-      if (file) handleUpload(file);
-    },
-    [handleUpload]
-  );
-
-  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) handleUpload(file);
+  const reset = () => {
+    setUploadResults([]);
+    setError('');
+    setStep(1);
+    setCurrentFile('');
   };
-
-  const steps = [
-    { label: 'Parsing file structure', done: processingStep > 1 },
-    { label: 'AI mapping fields & detecting type', done: processingStep > 2 },
-    { label: 'Processing entities & metrics', done: processingStep > 3 },
-    { label: 'Running opportunity engine', done: false },
-  ];
-
-  const reset = () => { setResult(null); setSelectedFile(null); setError(''); };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -97,12 +88,7 @@ export default function UploadClient({ orgId, orgName }: Props) {
           </div>
           <div className="flex items-center gap-3">
             <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-full">{orgName}</span>
-            <Link
-              href={`/dashboard?orgId=${orgId}`}
-              className="text-sm text-gray-500 hover:text-gray-700"
-            >
-              ← Dashboard
-            </Link>
+            <Link href={`/dashboard?orgId=${orgId}`} className="text-sm text-gray-500 hover:text-gray-700">← Dashboard</Link>
           </div>
         </div>
       </header>
@@ -111,18 +97,23 @@ export default function UploadClient({ orgId, orgName }: Props) {
         <div className="mb-8 text-center">
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Upload Business Data</h1>
           <p className="text-gray-500 text-sm sm:text-base">
-            Upload any Excel or CSV file. AI will automatically map fields, identify entities, and surface opportunities.
+            Upload any Excel or CSV files. AI will automatically map fields, identify entities, and surface opportunities.
             <br className="hidden sm:inline" />
             <span className="text-indigo-600 font-medium"> MasterLookup files</span> are automatically detected and processed as entity crosswalks.
           </p>
         </div>
 
-        {/* Drop Zone */}
-        {!result && (
+        {/* Drop Zone — Step 1 & 2 */}
+        {step !== 3 && (
           <div
             onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
-            onDrop={handleDrop}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOver(false);
+              const files = Array.from(e.dataTransfer.files);
+              if (files.length) handleFileUpload(files);
+            }}
             onClick={() => !uploading && fileInputRef.current?.click()}
             className={`
               border-2 border-dashed rounded-2xl p-10 sm:p-16 text-center cursor-pointer transition-all
@@ -132,57 +123,35 @@ export default function UploadClient({ orgId, orgName }: Props) {
           >
             <input
               ref={fileInputRef}
+              id="file-input"
               type="file"
               accept=".xlsx,.xls,.csv"
-              onChange={handleFileInput}
+              multiple
               className="hidden"
               disabled={uploading}
+              onChange={(e) => {
+                const files = Array.from(e.target.files ?? []);
+                if (files.length) handleFileUpload(files);
+              }}
             />
 
             {uploading ? (
-              <div className="space-y-6">
-                {/* Spinner */}
-                <div className="flex items-center justify-center">
-                  <div className="relative">
-                    <svg className="animate-spin w-14 h-14 text-indigo-500" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
-                      <path className="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                  </div>
-                </div>
-                <div>
-                  <div className="font-semibold text-gray-800 text-lg">Processing {selectedFile?.name}…</div>
-                  <div className="text-gray-400 text-sm mt-1">AI is analyzing your file. This takes 5–30 seconds.</div>
-                </div>
-                {/* Step progress */}
-                <div className="space-y-2 text-sm text-left max-w-xs mx-auto">
-                  {steps.map((step, i) => (
-                    <div key={i} className={`flex items-center gap-2 transition-opacity ${processingStep > i ? 'opacity-100' : 'opacity-40'}`}>
-                      {step.done ? (
-                        <svg className="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                        </svg>
-                      ) : processingStep === i + 1 ? (
-                        <svg className="animate-spin w-4 h-4 text-indigo-500 flex-shrink-0" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                        </svg>
-                      ) : (
-                        <div className="w-4 h-4 rounded-full border border-gray-300 flex-shrink-0" />
-                      )}
-                      <span className={processingStep > i ? 'text-gray-700' : 'text-gray-400'}>{step.label}</span>
-                    </div>
-                  ))}
-                </div>
+              <div>
+                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+                <p className="text-gray-700 font-semibold text-lg">Processing {currentFile || 'files'}…</p>
+                <p className="text-gray-400 text-sm mt-1">AI is analyzing your files. This may take a moment.</p>
+                {uploadResults.length > 0 && (
+                  <p className="text-green-600 text-xs mt-3">✓ {uploadResults.length} file{uploadResults.length > 1 ? 's' : ''} done</p>
+                )}
               </div>
             ) : (
               <div className="space-y-4">
                 <div className="text-5xl">📤</div>
                 <div>
                   <div className="font-semibold text-gray-800 text-lg">
-                    {dragOver ? 'Drop it!' : 'Drag & drop your file here'}
+                    {dragOver ? 'Drop them!' : 'Drop files here (or select multiple)'}
                   </div>
-                  <div className="text-gray-500 text-sm mt-1">or click to browse · Excel (.xlsx, .xls) or CSV</div>
+                  <div className="text-gray-500 text-sm mt-1">Excel (.xlsx, .xls) or CSV — select multiple files at once</div>
                 </div>
                 <div className="text-xs text-gray-400">
                   Any structure works — AI figures it all out automatically
@@ -195,55 +164,14 @@ export default function UploadClient({ orgId, orgName }: Props) {
         {/* Error */}
         {error && (
           <div className="mt-6 bg-red-50 border border-red-200 rounded-xl p-5">
-            <div className="font-semibold text-red-700 mb-1">Upload failed</div>
-            <div className="text-red-600 text-sm">{error}</div>
-            <button onClick={reset} className="mt-3 text-sm text-red-600 underline hover:no-underline">
-              Try again
-            </button>
+            <div className="font-semibold text-red-700 mb-1">Upload error</div>
+            <div className="text-red-600 text-sm whitespace-pre-line">{error}</div>
+            <button onClick={reset} className="mt-3 text-sm text-red-600 underline hover:no-underline">Try again</button>
           </div>
         )}
 
-        {/* Success — Crosswalk */}
-        {result?.ok && result?.isCrosswalk && (
-          <div className="space-y-6">
-            <div className="bg-blue-50 border border-blue-200 rounded-2xl p-8">
-              <div className="flex items-center gap-3 mb-5">
-                <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white text-lg">🔗</div>
-                <div>
-                  <div className="font-bold text-blue-900 text-lg">Crosswalk processed!</div>
-                  <div className="text-blue-600 text-sm">{selectedFile?.name} — MasterLookup detected</div>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-white rounded-xl p-4 text-center border border-blue-100">
-                  <div className="text-3xl font-bold text-blue-700">{result.entitiesCreated ?? 0}</div>
-                  <div className="text-sm text-gray-500 mt-1">Entities Created</div>
-                </div>
-                <div className="bg-white rounded-xl p-4 text-center border border-blue-100">
-                  <div className="text-3xl font-bold text-blue-700">{result.aliasesMapped ?? 0}</div>
-                  <div className="text-sm text-gray-500 mt-1">Aliases Mapped</div>
-                </div>
-              </div>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-4">
-              <Link
-                href={`/dashboard?orgId=${orgId}`}
-                className="flex-1 inline-flex items-center justify-center gap-2 px-6 py-4 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-700 transition-colors text-center"
-              >
-                View Dashboard →
-              </Link>
-              <button
-                onClick={reset}
-                className="px-6 py-4 bg-white border border-gray-200 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 transition-colors"
-              >
-                Upload Another File
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Success — Regular */}
-        {result?.ok && !result?.isCrosswalk && (
+        {/* Step 3 — Results */}
+        {step === 3 && (
           <div className="space-y-6">
             <div className="bg-green-50 border border-green-200 rounded-2xl p-8">
               <div className="flex items-center gap-3 mb-5">
@@ -253,24 +181,32 @@ export default function UploadClient({ orgId, orgName }: Props) {
                   </svg>
                 </div>
                 <div>
-                  <div className="font-bold text-green-800 text-lg">Upload complete!</div>
-                  <div className="text-green-600 text-sm">{selectedFile?.name} · {orgName}</div>
+                  <div className="font-bold text-green-800 text-lg">
+                    {uploadResults.length === 1 ? 'Upload complete!' : `${uploadResults.length} files processed!`}
+                  </div>
+                  <div className="text-green-600 text-sm">{orgName}</div>
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="bg-white rounded-xl p-4 text-center border border-green-100">
-                  <div className="text-3xl font-bold text-green-700">{result.entitiesProcessed ?? 0}</div>
-                  <div className="text-sm text-gray-500 mt-1">New Entities</div>
+
+              {/* Per-file results */}
+              {uploadResults.map(r => (
+                <div key={r.filename} className="bg-white border border-green-100 rounded-lg p-3 mb-2">
+                  <p className="text-green-700 font-medium text-sm truncate">{r.filename}</p>
+                  {r.isCrosswalk ? (
+                    <div className="grid grid-cols-2 gap-2 mt-1">
+                      <div className="text-center"><div className="text-lg font-bold text-blue-600">{r.entitiesCreated ?? 0}</div><div className="text-xs text-blue-600">Entities Created</div></div>
+                      <div className="text-center"><div className="text-lg font-bold text-blue-600">{r.aliasesMapped ?? 0}</div><div className="text-xs text-blue-600">Aliases Mapped</div></div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-3 gap-2 mt-1">
+                      <div className="text-center"><div className="text-lg font-bold text-green-600">{r.entities}</div><div className="text-xs text-green-600">Entities</div></div>
+                      <div className="text-center"><div className="text-lg font-bold text-green-600">{r.metrics}</div><div className="text-xs text-green-600">Metrics</div></div>
+                      <div className="text-center"><div className="text-lg font-bold text-green-600">{r.sheets}</div><div className="text-xs text-green-600">Sheets</div></div>
+                    </div>
+                  )}
                 </div>
-                <div className="bg-white rounded-xl p-4 text-center border border-green-100">
-                  <div className="text-3xl font-bold text-green-700">{result.metricsCreated ?? 0}</div>
-                  <div className="text-sm text-gray-500 mt-1">Metrics Created</div>
-                </div>
-                <div className="bg-white rounded-xl p-4 text-center border border-green-100">
-                  <div className="text-3xl font-bold text-indigo-600">{result.sheetsProcessed ?? result.uploadIds?.length ?? 1}</div>
-                  <div className="text-sm text-gray-500 mt-1">Sheets Processed</div>
-                </div>
-              </div>
+              ))}
+
               <p className="text-green-700 text-xs mt-4 text-center">
                 Opportunity engine is running in the background — check the dashboard in ~30 seconds.
               </p>
@@ -281,25 +217,25 @@ export default function UploadClient({ orgId, orgName }: Props) {
                 href={`/dashboard?orgId=${orgId}`}
                 className="flex-1 inline-flex items-center justify-center gap-2 px-6 py-4 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-700 transition-colors text-center"
               >
-                View Dashboard →
+                View Opportunity Report →
               </Link>
               <button
                 onClick={reset}
                 className="px-6 py-4 bg-white border border-gray-200 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 transition-colors"
               >
-                Upload Another File
+                Upload More Files
               </button>
             </div>
           </div>
         )}
 
         {/* Format hints */}
-        {!uploading && !result && (
+        {step === 1 && !uploading && (
           <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-4">
             {[
               { emoji: '📊', label: 'Excel Workbooks', desc: 'Multi-sheet .xlsx files, any layout' },
               { emoji: '📋', label: 'CSV Files', desc: 'Any delimiter, any column structure' },
-              { emoji: '🔗', label: 'MasterLookup / Crosswalk', desc: 'Auto-detected — creates entity aliases from canonical names' },
+              { emoji: '🔗', label: 'MasterLookup / Crosswalk', desc: 'Auto-detected — creates entity aliases' },
             ].map((item) => (
               <div key={item.label} className="bg-white rounded-xl border border-gray-100 p-4 text-center">
                 <div className="text-2xl mb-2">{item.emoji}</div>
