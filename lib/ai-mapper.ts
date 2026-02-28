@@ -32,13 +32,13 @@ export function ruleBasedMapper(
   const entityKeywords = /name|location|branch|office|practice|store|site|department|region|entity/i;
   const entityColumn = headers.find((h) => entityKeywords.test(h)) ?? headers[0];
 
-  // Detect date column
-  const dateKeywords = /date|period|month|year|quarter|week/i;
+  // Detect date column — match specific date-like headers, not words like "Monthly Revenue"
+  const dateKeywords = /\b(date|period|quarter|week)\b|^month$|^year$/i;
   const dateColumn = headers.find((h) => dateKeywords.test(h)) ?? null;
 
-  // Detect numeric metric columns
+  // Detect numeric metric columns (exclude entity and date columns)
   const fields = headers
-    .filter((h) => h !== entityColumn && h !== dateColumn)
+    .filter((h) => h !== entityColumn && (!dateColumn || h !== dateColumn))
     .map((h) => {
       // Infer category from header name
       let category = 'efficiency';
