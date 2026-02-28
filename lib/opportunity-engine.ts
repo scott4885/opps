@@ -28,6 +28,8 @@ Analyze this data and identify ALL high-value opportunities for EVERY entity in 
 - Every opportunity MUST have a dollar value (valueSized) — estimate based on data if not explicit
 - Each opportunity gets EXACTLY ONE recommended action (the best one)
 - You may add 1-2 short alternatives in the alternatives array
+- You MUST include a "detail" field: 2-4 sentences explaining HOW you arrived at this opportunity — the specific metric values compared to benchmarks/averages, the gap identified, and the estimated dollar impact calculation in plain English (no jargon)
+- You MUST include a "nextSteps" array: 3-5 specific, actionable steps, each prefixed with the role owner in brackets, e.g. "[Office Manager] Review hygiene schedule..." — make them specific to this entity's situation, not generic
 
 Return a JSON object with:
 1. opportunities — one or more per entity, sorted by valueSized descending
@@ -41,6 +43,12 @@ Return a JSON object with:
       "title": "Short opportunity title",
       "valueSized": 847000,
       "recommendation": "One specific action to take right now",
+      "detail": "This recommendation is based on [metric] being [X] vs. the [Y] benchmark. The gap of [Z] units represents approximately $[N] in [monthly/annual] revenue at current production rates. Calculation: [brief formula or logic used].",
+      "nextSteps": [
+        "[Role] Specific step 1",
+        "[Role] Specific step 2",
+        "[Role] Specific step 3"
+      ],
       "alternatives": ["Alternative action 1", "Alternative action 2"],
       "priority": 1,
       "metricSlugs": ["relevant", "metric", "slugs"]
@@ -67,6 +75,8 @@ Return a JSON object with:
       title: string;
       valueSized?: number;
       recommendation: string;
+      detail?: string;
+      nextSteps?: string[];
       alternatives?: string[];
       priority?: number;
       metricSlugs?: string[];
@@ -116,6 +126,8 @@ export async function runOpportunityEngine(orgId: number) {
     title: string;
     valueSized?: number;
     recommendation: string;
+    detail?: string;
+    nextSteps?: string[];
     alternatives?: string[];
     priority?: number;
     metricSlugs?: string[];
@@ -171,6 +183,8 @@ export async function runOpportunityEngine(orgId: number) {
         title: opp.title,
         valueSized: opp.valueSized,
         recommendation: opp.recommendation,
+        detail: opp.detail || null,
+        nextSteps: opp.nextSteps ? JSON.stringify(opp.nextSteps) : null,
         alternatives: opp.alternatives ? JSON.stringify(opp.alternatives) : null,
         priority: opp.priority || 0,
         metrics: { connect: metricIds },

@@ -4,7 +4,7 @@
 
 | Version | Date | Change |
 |---------|------|--------|
-| v1.2 | 2026-02-28 | Opportunity drill-down, AI Detail section, Next Steps section |
+| v1.2 | 2026-02-28 | Opportunity drill-down ("Why this opportunity?"), Detail section, Next Steps section added to opportunity cards |
 | v1.1 | 2026-02-28 | AI model upgrade to Sonnet (env-var configurable), max_tokens restored, opportunity score explainer added to UI, PRD created |
 | v1.0 | 2026-02-27 | Initial release — scaffold, AI mapper, opportunity engine, dashboard, upload flow |
 
@@ -78,7 +78,7 @@ A named KPI (e.g. `monthly_production`, `new_patient_count`). AI-generated from 
 Time-series data point: entity × metric × upload. Tracks `isLatest` flag for current-state views.
 
 ### Opportunity
-AI-generated insight: type, title, dollar value (`valueSized`), primary recommendation, alternatives, priority rank. Linked to entity and relevant metrics.
+AI-generated insight: type, title, dollar value (`valueSized`), primary recommendation, `detail` (plain-English analysis explanation), `nextSteps` (JSON array of role-tagged actions), alternatives, priority rank. Linked to entity and relevant metrics.
 
 ### OpportunityScore
 Per-entity composite score (0–100). Higher = more unrealized value available. Computed by Claude after each upload. Includes `primaryOpportunityType` and `primaryValueSized` for context.
@@ -94,6 +94,9 @@ Per-entity composite score (0–100). Higher = more unrealized value available. 
 - **Opportunity Engine** — Claude produces up to 8 ranked, dollar-valued opportunities per analysis run
 - **Opportunity Scores** — Per-entity 0–100 score with color coding (red=high opp, green=low opp)
 - **Score Explainer** — Info tooltip on Opportunity Scores explaining the scoring methodology
+- **Opportunity Drill-Down** — "Why this opportunity?" collapsible on each card showing the specific metric values that triggered the opportunity flag
+- **Detail Section** — Plain-English explanation of HOW Claude arrived at each recommendation (methodology, current value vs. benchmark, gap, dollar impact formula)
+- **Next Steps Section** — 3-5 role-tagged actionable steps per opportunity (e.g. "[Office Manager] Review hygiene schedule…") ordered between Detail and Alternatives
 - **Dashboard** — Total opportunity value banner, score cards, opportunity accordion, entity table
 - **Multi-org Support** — Org selector for DSO clients
 - **Data Sources Panel** — Tracks all uploaded files with timestamps
@@ -118,6 +121,20 @@ Per-entity composite score (0–100). Higher = more unrealized value available. 
 
 ## Sprint Log
 
+### Sprint 2 — 2026-02-28 (v1.2)
+
+**Forge Agent (Claude Code)**
+
+1. **Opportunity Drill-Down ("Why this opportunity?")** — Each opportunity card now has a "Why this opportunity?" collapsible button that expands to show a grid of the specific metric values that triggered the opportunity flag. Metrics linked via `metricSlugs` in the AI response are shown first; if none linked, shows top 8 entity metrics as context.
+   - New `whyMetrics` field shaped in both the API (`/api/orgs/[id]/opportunities`) and the dashboard server component
+   - UI: indigo-tinted metric grid with formatted values (dollar/percent/count/days auto-detected)
+
+2. **Detail Section** — New `detail` field added to `Opportunity` schema. AI prompt updated to produce a 2-4 sentence plain-English explanation: specific metric vs. benchmark, gap identified, dollar impact calculation. Displayed between Recommendation and Next Steps in a soft gray card.
+
+3. **Next Steps Section** — New `nextSteps` field (JSON array) added to `Opportunity` schema. AI prompt updated to produce 3-5 role-tagged steps (e.g. `[Office Manager] Step...`). Rendered as a numbered list with color-coded role badges. Shown below Detail, above Alternatives. Role colors: violet=Office Manager, blue=Dentist/Doctor, teal=Hygienist, orange=ROD/Regional, pink=Front Desk, yellow=Billing.
+
+4. **Schema Migration** — Added `detail String?` and `nextSteps String?` columns to `Opportunity` table via `ALTER TABLE` on production database.
+
 ### Sprint 1 — 2026-02-28 (v1.1)
 
 **Forge Agent (Claude Code)**
@@ -133,34 +150,6 @@ Per-entity composite score (0–100). Higher = more unrealized value available. 
    - Consistent with existing MetricCell tooltip pattern
 
 3. **PRD.md** — This document created
-
----
-
-
-### Sprint 2 — 2026-02-28 (v1.2)
-
-**Forge Agent (Claude Code)**
-
-1. **Opportunity Tile Drill-Down** — "Why this opportunity?" expandable panel on each opportunity card
-   - Shows the specific metric values that triggered the opportunity
-   - Amber highlight band with metric cards; linked/triggering metrics visually distinguished
-   - Falls back to all entity metrics if no linked metrics detected
-
-2. **AI Detail Section** — Added between Recommendation and Alternatives
-   - **Why:** Plain-English explanation of the specific data pattern (AI-generated per opportunity)
-   - **The Numbers:** Key supporting metrics displayed as cards with actual values from the data
-   - **Calculation Basis:** How the dollar opportunity value was estimated
-   - AI-generated on first expand, cached in DB (aiDetail field on Opportunity model)
-
-3. **Next Steps Section** — Added below Detail section (order: Recommendation -> Detail -> Next Steps -> Alternatives)
-   - 4-5 specific, actionable steps the practice manager should take
-   - Numbered checklist format with green visual treatment
-   - AI-generated per opportunity, cached in DB (aiNextSteps field)
-
-4. **Schema Migration** — Added aiDetail and aiNextSteps TEXT columns to Opportunity table
-
-5. **New API Route** — GET /api/opportunity/[id]/detail generates and caches AI detail + next steps
-
 
 ---
 

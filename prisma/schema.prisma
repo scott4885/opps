@@ -136,13 +136,12 @@ model Opportunity {
   title          String
   valueSized     Float?       // dollar value of opportunity
   recommendation String       // one action
+  detail         String?      // Plain-English explanation of methodology and numbers
+  nextSteps      String?      // JSON array of role-tagged action steps
   alternatives   String?      // JSON array of 1-2 alternatives
   priority       Int          @default(0) // higher = more important
   updatedAt      DateTime     @updatedAt
   createdAt      DateTime     @default(now())
-
-  aiDetail      String?      // AI-generated detail section (cached)
-  aiNextSteps    String?      // AI-generated next steps (cached)
 
   metrics Metric[] @relation("OpportunityMetrics")
 }

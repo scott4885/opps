@@ -98,10 +98,60 @@ export default async function DashboardPage({
     redirect(`/dashboard?orgId=${session.orgId}`);
   }
 
-  const opportunities = await prisma.opportunity.findMany({
+  const rawOpportunities = await prisma.opportunity.findMany({
     where: { orgId },
-    orderBy: [{ priority: "asc" }, { valueSized: "desc" }],
-    include: { entity: { include: { score: true, metricValues: { where: { isLatest: true }, include: { metric: true } } } }, metrics: true },
+    include: {
+      entity: {
+        include: {
+          score: true,
+          metricValues: {
+            where: { isLatest: true },
+            include: { metric: { select: { id: true, name: true, slug: true, unit: true, category: true } } },
+          },
+        },
+      },
+      metrics: { select: { id: true, name: true, slug: true, unit: true, category: true } },
+    },
+    orderBy: [{ priority: 'asc' }, { valueSized: 'desc' }],
+  });
+
+  // Shape opportunities to include whyMetrics for the drill-down
+  const opportunities = rawOpportunities.map((opp) => {
+    const entityMetricValues = opp.entity?.metricValues ?? [];
+    const linkedSlugs = new Set(opp.metrics.map((m) => m.slug));
+    const whyMetrics = entityMetricValues
+      .filter((mv) => linkedSlugs.has(mv.metric.slug))
+      .map((mv) => ({
+        name: mv.metric.name,
+        slug: mv.metric.slug,
+        unit: mv.metric.unit,
+        category: mv.metric.category,
+        value: mv.value,
+      }));
+    const contextMetrics = whyMetrics.length > 0
+      ? whyMetrics
+      : entityMetricValues.slice(0, 8).map((mv) => ({
+          name: mv.metric.name,
+          slug: mv.metric.slug,
+          unit: mv.metric.unit,
+          category: mv.metric.category,
+          value: mv.value,
+        }));
+    return {
+      id: opp.id,
+      title: opp.title,
+      type: opp.type,
+      priority: opp.priority,
+      valueSized: opp.valueSized,
+      recommendation: opp.recommendation,
+      detail: opp.detail ?? null,
+      nextSteps: opp.nextSteps ?? null,
+      alternatives: opp.alternatives ?? null,
+      entity: opp.entity
+        ? { id: opp.entity.id, canonicalName: opp.entity.canonicalName, score: opp.entity.score }
+        : null,
+      whyMetrics: contextMetrics,
+    };
   });
 
   const entities = await prisma.entity.findMany({
