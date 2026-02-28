@@ -4,6 +4,7 @@
 
 | Version | Date | Change |
 |---------|------|--------|
+| v1.2 | 2026-02-28 | Opportunity drill-down, AI Detail section, Next Steps section |
 | v1.1 | 2026-02-28 | AI model upgrade to Sonnet (env-var configurable), max_tokens restored, opportunity score explainer added to UI, PRD created |
 | v1.0 | 2026-02-27 | Initial release — scaffold, AI mapper, opportunity engine, dashboard, upload flow |
 
@@ -132,6 +133,34 @@ Per-entity composite score (0–100). Higher = more unrealized value available. 
    - Consistent with existing MetricCell tooltip pattern
 
 3. **PRD.md** — This document created
+
+---
+
+
+### Sprint 2 — 2026-02-28 (v1.2)
+
+**Forge Agent (Claude Code)**
+
+1. **Opportunity Tile Drill-Down** — "Why this opportunity?" expandable panel on each opportunity card
+   - Shows the specific metric values that triggered the opportunity
+   - Amber highlight band with metric cards; linked/triggering metrics visually distinguished
+   - Falls back to all entity metrics if no linked metrics detected
+
+2. **AI Detail Section** — Added between Recommendation and Alternatives
+   - **Why:** Plain-English explanation of the specific data pattern (AI-generated per opportunity)
+   - **The Numbers:** Key supporting metrics displayed as cards with actual values from the data
+   - **Calculation Basis:** How the dollar opportunity value was estimated
+   - AI-generated on first expand, cached in DB (aiDetail field on Opportunity model)
+
+3. **Next Steps Section** — Added below Detail section (order: Recommendation -> Detail -> Next Steps -> Alternatives)
+   - 4-5 specific, actionable steps the practice manager should take
+   - Numbered checklist format with green visual treatment
+   - AI-generated per opportunity, cached in DB (aiNextSteps field)
+
+4. **Schema Migration** — Added aiDetail and aiNextSteps TEXT columns to Opportunity table
+
+5. **New API Route** — GET /api/opportunity/[id]/detail generates and caches AI detail + next steps
+
 
 ---
 

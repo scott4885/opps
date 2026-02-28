@@ -141,6 +141,9 @@ model Opportunity {
   updatedAt      DateTime     @updatedAt
   createdAt      DateTime     @default(now())
 
+  aiDetail      String?      // AI-generated detail section (cached)
+  aiNextSteps    String?      // AI-generated next steps (cached)
+
   metrics Metric[] @relation("OpportunityMetrics")
 }
 

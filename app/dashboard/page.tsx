@@ -100,8 +100,8 @@ export default async function DashboardPage({
 
   const opportunities = await prisma.opportunity.findMany({
     where: { orgId },
-    include: { entity: { include: { score: true } } },
-    orderBy: [{ priority: 'asc' }, { valueSized: 'desc' }],
+    orderBy: [{ priority: "asc" }, { valueSized: "desc" }],
+    include: { entity: { include: { score: true, metricValues: { where: { isLatest: true }, include: { metric: true } } } }, metrics: true },
   });
 
   const entities = await prisma.entity.findMany({
