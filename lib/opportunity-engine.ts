@@ -52,7 +52,7 @@ Return a JSON object with:
 }`;
 
   const response = await client.messages.create({
-    model: 'claude-opus-4-5',
+    model: (process.env.AI_MODEL || 'claude-sonnet-4-20250514') as Parameters<typeof client.messages.create>[0]['model'],
     max_tokens: 8192,
     messages: [{ role: 'user', content: prompt }],
   });

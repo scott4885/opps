@@ -271,7 +271,25 @@ export default async function DashboardPage({
         {entityScores.length > 0 && (
           <section>
             <div className="flex items-center justify-between mb-3 sm:mb-4">
-              <h2 className="text-base sm:text-lg font-semibold text-gray-900">Opportunity Scores</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base sm:text-lg font-semibold text-gray-900">Opportunity Scores</h2>
+                <span className="group relative inline-flex items-center cursor-help">
+                  <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gray-100 text-gray-500 text-xs font-bold hover:bg-indigo-50 hover:text-indigo-600 transition-colors select-none border border-gray-200">i</span>
+                  <span className="invisible group-hover:visible absolute left-0 bottom-full mb-2 z-50 w-80 pointer-events-none">
+                    <span className="block bg-gray-900 text-white text-xs rounded-xl p-4 shadow-2xl text-left leading-relaxed">
+                      <span className="block font-semibold text-white mb-2 text-sm">How Opportunity Scores Work</span>
+                      <span className="block text-gray-300 mb-2">Each entity gets a score from 0-100 reflecting unrealized value available. Higher score = more opportunity to capture.</span>
+                      <span className="block text-gray-200 font-medium mb-1">Claude scores across 5 dimensions:</span>
+                      <span className="block text-gray-300 mb-px">Revenue -- production gaps, pricing upside</span>
+                      <span className="block text-gray-300 mb-px">Efficiency -- cost ratios, workflow bottlenecks</span>
+                      <span className="block text-gray-300 mb-px">Capacity -- utilization vs. available hours</span>
+                      <span className="block text-gray-300 mb-px">Cost -- spend optimization potential</span>
+                      <span className="block text-gray-300 mb-3">Retention -- patient / customer churn risk</span>
+                      <span className="block text-xs text-gray-400 border-t border-gray-700 pt-2">Red 80+ | Orange 60-79 | Yellow 40-59 | Green &lt;40 (well-optimized)</span>
+                    </span>
+                  </span>
+                </span>
+              </div>
               <Link
                 href={`/entities?orgId=${orgId}`}
                 className="text-sm text-indigo-600 hover:text-indigo-800 font-medium transition-colors"
