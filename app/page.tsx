@@ -1,25 +1,17 @@
-import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
 
-export const dynamic = 'force-dynamic';
-
-export default async function HomePage() {
-  const orgs = await prisma.organization.findMany({ orderBy: { createdAt: 'asc' } });
-  const primaryOrg = orgs[0] ?? null;
-
+export default function HomePage() {
   return (
     <div className="min-h-screen bg-white flex flex-col">
       {/* Nav */}
       <nav className="border-b border-gray-100 px-6 py-4 flex items-center justify-between max-w-6xl mx-auto w-full">
         <span className="text-2xl font-bold text-indigo-600 tracking-tight">Opps.</span>
-        {primaryOrg && (
-          <Link
-            href={`/dashboard?orgId=${primaryOrg.id}`}
-            className="text-sm font-medium text-gray-600 hover:text-indigo-600 transition-colors"
-          >
-            {primaryOrg.name} →
-          </Link>
-        )}
+        <Link
+          href="/login"
+          className="text-sm font-medium text-gray-600 hover:text-indigo-600 transition-colors"
+        >
+          Login →
+        </Link>
       </nav>
 
       {/* Hero */}
@@ -41,49 +33,15 @@ export default async function HomePage() {
           Upload any business data. AI maps it, finds the gaps, and hands you dollar-valued opportunities with one clear action each.
         </p>
 
-        {/* CTAs */}
+        {/* CTA */}
         <div className="flex flex-col sm:flex-row gap-4 items-center justify-center w-full max-w-md">
-          {primaryOrg ? (
-            <Link
-              href={`/dashboard?orgId=${primaryOrg.id}`}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-4 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200 text-base"
-            >
-              View Dashboard →
-            </Link>
-          ) : (
-            <Link
-              href="/setup"
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-4 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200 text-base"
-            >
-              Get Started →
-            </Link>
-          )}
           <Link
-            href={primaryOrg ? `/upload?orgId=${primaryOrg.id}` : '/upload'}
-            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-4 bg-white text-indigo-600 font-semibold rounded-xl border-2 border-indigo-200 hover:border-indigo-400 hover:bg-indigo-50 transition-colors text-base"
+            href="/login"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-4 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200 text-base"
           >
-            Upload Data →
+            Login →
           </Link>
         </div>
-
-        {/* Org switcher for multiple orgs */}
-        {orgs.length > 1 && (
-          <div className="mt-8 w-full max-w-sm">
-            <p className="text-xs text-gray-400 mb-3 uppercase tracking-wide">Switch organization</p>
-            <div className="space-y-2">
-              {orgs.map((org) => (
-                <Link
-                  key={org.id}
-                  href={`/dashboard?orgId=${org.id}`}
-                  className="block w-full p-3 bg-white rounded-xl border border-gray-200 hover:border-indigo-300 hover:shadow-sm transition-all text-left"
-                >
-                  <div className="font-semibold text-gray-900 text-sm">{org.name}</div>
-                  {org.industry && <div className="text-xs text-gray-400">{org.industry}</div>}
-                </Link>
-              ))}
-            </div>
-          </div>
-        )}
       </main>
 
       {/* Feature strip */}

@@ -142,6 +142,11 @@ async function main() {
   });
   console.log('  ✓ demo@opps.ai user');
 
+  // Sync PostgreSQL auto-increment sequences after explicit ID inserts
+  await prisma.$executeRaw`SELECT setval('"Organization_id_seq"', (SELECT COALESCE(MAX(id), 1) FROM "Organization"))`;
+  await prisma.$executeRaw`SELECT setval('"User_id_seq"', (SELECT COALESCE(MAX(id), 1) FROM "User"))`;
+  console.log('  ✓ PostgreSQL sequences synced');
+
   console.log('Seed complete! Org ID:', org.id);
 }
 

@@ -42,7 +42,43 @@ export default async function DashboardPage({
   searchParams: Promise<{ orgId?: string }>;
 }) {
   const sp = await searchParams;
-  const orgId = sp.orgId ? parseInt(sp.orgId) : 1;
+  const session = await getSession();
+
+  // FIX-6: If admin with no orgId param, show org picker
+  if (session && session.role === 'admin' && !sp.orgId) {
+    const allOrgs = await prisma.organization.findMany({
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, name: true, industry: true },
+    });
+
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8 max-w-md w-full">
+          <div className="text-center mb-6">
+            <span className="text-2xl font-bold text-indigo-600">Opps.</span>
+            <h2 className="text-lg font-semibold text-gray-900 mt-4">Select an organization to view:</h2>
+          </div>
+          <div className="space-y-3">
+            {allOrgs.map((o) => (
+              <a
+                key={o.id}
+                href={`/dashboard?orgId=${o.id}`}
+                className="block w-full p-4 bg-white rounded-xl border border-gray-200 hover:border-indigo-400 hover:shadow-sm transition-all text-left"
+              >
+                <div className="font-semibold text-gray-900">{o.name}</div>
+                {o.industry && <div className="text-sm text-gray-400 mt-0.5">{o.industry}</div>}
+              </a>
+            ))}
+          </div>
+          <div className="mt-6 text-center">
+            <SignOutButton />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const orgId = sp.orgId ? parseInt(sp.orgId) : (session?.orgId ?? 1);
 
   const org = await prisma.organization.findUnique({
     where: { id: orgId },
@@ -58,7 +94,6 @@ export default async function DashboardPage({
   if (!org) redirect('/setup');
 
   // Auth enforcement: members can only see their own org
-  const session = await getSession();
   if (session && session.role === 'member' && session.orgId && session.orgId !== orgId) {
     redirect(`/dashboard?orgId=${session.orgId}`);
   }
@@ -92,9 +127,16 @@ export default async function DashboardPage({
     .filter((e) => e.score !== null)
     .sort((a, b) => (b.score?.score || 0) - (a.score?.score || 0));
 
-  const lastUploadDate = org.dataSources
+  const lastUploadFromSources = org.dataSources
     .flatMap((ds) => ds.uploads)
     .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime())[0]?.uploadedAt;
+
+  // FIX-7: Fall back to most recent entity createdAt when no uploads exist
+  const lastUploadDate = lastUploadFromSources ?? await prisma.entity.findFirst({
+    where: { orgId },
+    orderBy: { createdAt: 'desc' },
+    select: { createdAt: true },
+  }).then(e => e?.createdAt);
 
   const sourcesConnected = org.dataSources.length;
 

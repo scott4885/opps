@@ -338,12 +338,41 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // If ALL sheets failed mapping, return error
+    // If ALL sheets failed mapping, create a failed upload record for audit trail then return error
     if (processedSheets.length === 0 && failedSheets.length > 0) {
+      await prisma.upload.create({
+        data: {
+          orgId,
+          filename: file.name,
+          rowCount: sheets.reduce((sum, s) => sum + s.rows.length, 0),
+          fieldCount: 0,
+          mappingSummary: JSON.stringify({ status: 'failed', failedSheets, error: 'AI mapping failed for all sheets' }),
+        },
+      });
       return NextResponse.json({
         ok: false,
-        error: 'AI mapping failed for all sheets — check ANTHROPIC_API_KEY and credit balance. Rule-based fallback also produced no results.',
+        error: 'No data could be extracted from this file. Check that it contains numeric data columns.',
         failedSheets,
+      }, { status: 422 });
+    }
+
+    // If some sheets were processed but resulted in 0 entities/metrics, also treat as failure
+    if (totalEntitiesProcessed === 0 && totalMetricsCreated === 0 && processedSheets.length > 0) {
+      // An upload record may already exist from processing — create one if not
+      if (uploadId === 0) {
+        await prisma.upload.create({
+          data: {
+            orgId,
+            filename: file.name,
+            rowCount: sheets.reduce((sum, s) => sum + s.rows.length, 0),
+            fieldCount: 0,
+            mappingSummary: JSON.stringify({ status: 'failed', error: 'No entities or metrics extracted' }),
+          },
+        });
+      }
+      return NextResponse.json({
+        ok: false,
+        error: 'No data could be extracted from this file. Check that it contains numeric data columns.',
       }, { status: 422 });
     }
 

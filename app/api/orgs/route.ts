@@ -7,7 +7,13 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
+    // Non-admin users can only see their own org
+    const whereClause = session.role !== 'admin' && session.orgId
+      ? { id: session.orgId }
+      : {};
+
     const orgs = await prisma.organization.findMany({
+      where: whereClause,
       orderBy: { createdAt: 'asc' },
       include: {
         _count: {
