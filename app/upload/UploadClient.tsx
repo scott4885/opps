@@ -46,7 +46,10 @@ export default function UploadClient({ orgId: initialOrgId, orgName }: { orgId: 
       try {
         const res = await fetch('/api/upload', { method: 'POST', body: fd });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Upload failed');
+        if (!res.ok || !data.ok) throw new Error(data.error || 'Upload failed — please try again');
+        if (data.partialFailure) {
+          console.warn('Partial upload failure:', data.failedSheets);
+        }
         results.push({
           filename: file.name,
           entities: data.entitiesProcessed ?? data.entitiesCreated ?? 0,

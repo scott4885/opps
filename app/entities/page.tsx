@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { getSession } from '@/lib/auth';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { EntitiesBrowser } from './EntitiesBrowser';
@@ -22,6 +23,12 @@ export default async function EntitiesPage({
 
   const org = await prisma.organization.findUnique({ where: { id: orgId } });
   if (!org) redirect('/setup');
+
+  // Auth enforcement: members can only see their own org
+  const session = await getSession();
+  if (session && session.role === 'member' && session.orgId && session.orgId !== orgId) {
+    redirect(`/entities?orgId=${session.orgId}`);
+  }
 
   const entities = await prisma.entity.findMany({
     where: { orgId },

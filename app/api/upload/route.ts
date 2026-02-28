@@ -10,6 +10,9 @@ import { cookies } from 'next/headers';
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
 
+// Allow uploads up to 50MB (Next.js App Router)
+export const maxSize = 50 * 1024 * 1024;
+
 // ---------- MasterLookup / Crosswalk detection ----------
 
 /**
@@ -194,11 +197,13 @@ export async function POST(req: NextRequest) {
     let totalEntitiesProcessed = 0;
     let totalMetricsCreated = 0;
     let uploadId = 0;
+    const failedSheets: string[] = [];
+    const processedSheets: string[] = [];
 
     for (const sheet of sheets) {
       if (sheet.rows.length === 0) continue;
 
-      // AI mapping
+      // AI mapping (with rule-based fallback built into mapFileToMetrics)
       let mapping;
       try {
         mapping = await mapFileToMetrics(
@@ -208,11 +213,17 @@ export async function POST(req: NextRequest) {
           businessProfile || `Organization: ${org.name}, Industry: ${org.industry || 'General'}`
         );
       } catch (err) {
-        console.error('[upload] AI mapping failed for sheet', sheet.sheetName, err);
+        console.error('[upload] Mapping failed for sheet', sheet.sheetName, err);
+        failedSheets.push(sheet.sheetName);
         continue;
       }
 
-      if (!mapping.fields || mapping.fields.length === 0) continue;
+      if (!mapping.fields || mapping.fields.length === 0) {
+        failedSheets.push(sheet.sheetName);
+        continue;
+      }
+
+      processedSheets.push(sheet.sheetName);
 
       // Find or create DataSource
       let dataSource = await prisma.dataSource.findFirst({
@@ -327,6 +338,15 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // If ALL sheets failed mapping, return error
+    if (processedSheets.length === 0 && failedSheets.length > 0) {
+      return NextResponse.json({
+        ok: false,
+        error: 'AI mapping failed for all sheets — check ANTHROPIC_API_KEY and credit balance. Rule-based fallback also produced no results.',
+        failedSheets,
+      }, { status: 422 });
+    }
+
     // Run opportunity engine async (don't await — return to client faster)
     runOpportunityEngine(orgId).catch((err) =>
       console.error('[upload] opportunity engine error', err)
@@ -338,8 +358,11 @@ export async function POST(req: NextRequest) {
       uploadId,
       entitiesProcessed: totalEntitiesProcessed,
       metricsCreated: totalMetricsCreated,
-      sheetsProcessed: sheets.length,
-      message: 'File processed. Opportunities are being generated in the background.',
+      sheetsProcessed: processedSheets.length,
+      ...(failedSheets.length > 0 ? { partialFailure: true, failedSheets } : {}),
+      message: failedSheets.length > 0
+        ? `File partially processed (${failedSheets.length} sheet(s) failed). Opportunities are being generated.`
+        : 'File processed. Opportunities are being generated in the background.',
     });
   } catch (error) {
     console.error('[upload POST]', error);

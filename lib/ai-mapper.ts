@@ -19,7 +19,86 @@ export interface MappingResult {
   notes: string;
 }
 
+/**
+ * Rule-based fallback mapper that fires when AI mapping is unavailable.
+ * Detects entity columns by keyword matching and infers metric categories from header names.
+ */
+export function ruleBasedMapper(
+  sheetName: string,
+  headers: string[],
+  rows: Record<string, unknown>[]
+): MappingResult {
+  // Detect entity column: first column that looks like a name/location
+  const entityKeywords = /name|location|branch|office|practice|store|site|department|region|entity/i;
+  const entityColumn = headers.find((h) => entityKeywords.test(h)) ?? headers[0];
+
+  // Detect date column
+  const dateKeywords = /date|period|month|year|quarter|week/i;
+  const dateColumn = headers.find((h) => dateKeywords.test(h)) ?? null;
+
+  // Detect numeric metric columns
+  const fields = headers
+    .filter((h) => h !== entityColumn && h !== dateColumn)
+    .map((h) => {
+      // Infer category from header name
+      let category = 'efficiency';
+      if (/revenue|sales|income|gross|net|collection|production/i.test(h)) category = 'revenue';
+      else if (/cost|expense|spend|overhead|labor/i.test(h)) category = 'cost';
+      else if (/capacity|utilization|occupancy|fill/i.test(h)) category = 'capacity';
+      else if (/retention|churn|turnover|satisfaction/i.test(h)) category = 'retention';
+
+      let unit = 'count';
+      if (/\$|revenue|sales|income|cost|expense|amount|balance|payment|fee/i.test(h)) unit = 'dollar';
+      else if (/%|rate|pct|percent|ratio/i.test(h)) unit = 'percent';
+
+      return {
+        column: h,
+        metricName: h,
+        metricSlug: h
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-|-$/g, ''),
+        category,
+        unit,
+        description: `${h} from ${sheetName}`,
+      };
+    })
+    .filter((f) => {
+      // Only include columns that have numeric values in the first 5 rows
+      const sample = rows
+        .slice(0, 5)
+        .map((r) => r[f.column])
+        .filter(Boolean);
+      return sample.some((v) => !isNaN(parseFloat(String(v).replace(/[$,%]/g, ''))));
+    });
+
+  return {
+    dataSourceName: sheetName,
+    entityColumn,
+    entityType: 'location',
+    dateColumn,
+    fields: fields.slice(0, 20), // cap at 20 metrics per sheet
+    confidence: 0.5,
+    notes: 'Mapped using rule-based fallback (AI unavailable)',
+  };
+}
+
 export async function mapFileToMetrics(
+  sheetName: string,
+  headers: string[],
+  sampleRows: Record<string, unknown>[],
+  businessProfile: string
+): Promise<MappingResult> {
+  try {
+    return await callAI(sheetName, headers, sampleRows, businessProfile);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn('[ai-mapper] AI failed, using rule-based fallback:', message);
+    return ruleBasedMapper(sheetName, headers, sampleRows);
+  }
+}
+
+async function callAI(
   sheetName: string,
   headers: string[],
   sampleRows: Record<string, unknown>[],
